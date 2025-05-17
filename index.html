@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-900 text-white">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Assignment Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen px-6 py-8">
+  <h1 class="text-4xl font-bold text-yellow-400 mb-6 text-center">📘 Assignment Tracker</h1>
+
+  <!-- Platform Filter -->
+  <div class="mb-8 text-center">
+    <label for="platformFilter" class="text-lg font-semibold text-white mr-2">Filter by Platform:</label>
+    <select id="platformFilter" class="p-2 bg-gray-700 text-white rounded-lg"></select>
+  </div>
+
+  <!-- Counts Display -->
+  <div id="countsDisplay" class="mb-8 text-center"></div>
+
+  <!-- Assignment List -->
+  <section id="assignmentsList" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></section>
+
+  <script>
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTVfwEi72-GrAUadv07AmV1fDPDj4FtEQ1vL0K58Zpz7F7_RmQuljU9x3agT2fG0Au1LFi3NaGCy0RR/pub?gid=61493459&single=true&output=csv';
+
+    const PLATFORM_NORMALIZATION_MAP = {
+      'leetcode': 'LeetCode',
+      'leet code': 'LeetCode',
+      'geeksforgeeks': 'Geeks for Geeks',
+      'geeks for geeks': 'Geeks for Geeks',
+      'interviewbit': 'Interview Bit',
+      'interview bit': 'Interview Bit',
+      'hackerrank': 'HackerRank',
+      'hacker rank': 'HackerRank',
+    };
+
+    function normalizePlatformName(raw) {
+      if (!raw) return '';
+      const key = raw.toLowerCase().replace(/\s+/g, '');
+      return PLATFORM_NORMALIZATION_MAP[key] || raw;
+    }
+
+    async function loadAssignmentsFromCSV(url) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to fetch CSV: ${response.status}`);
+        const csvText = await response.text();
+        return new Promise((resolve) => {
+          Papa.parse(csvText, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+              const data = results.data.map(row => ({
+                ...row,
+                Platform: normalizePlatformName(row.Platform),
+              }));
+              resolve(data);
+            },
+          });
+        });
+      } catch (error) {
+        console.error('Error loading CSV:', error);
+        alert('Failed to load assignments. Please check the CSV URL or try again later.');
+        return [];
+      }
+    }
+
+    function populatePlatformFilter(platforms) {
+      const select = document.getElementById('platformFilter');
+      select.innerHTML = '';
+      const allOption = document.createElement('option');
+      allOption.value = 'All';
+      allOption.textContent = 'All';
+      select.appendChild(allOption);
+      platforms.forEach(pl => {
+        const opt = document.createElement('option');
+        opt.value = pl;
+        opt.textContent = pl;
+        select.appendChild(opt);
+      });
+      select.value = 'All';
+      select.addEventListener('change', () => {
+        filterByPlatform(select.value);
+        updateCounts(select.value);
+      });
+    }
+
+    function createAssignmentCard(assignment) {
+      const {
+        Date,
+        "Class Name": className,
+        "Content Covered": content,
+        "Problem Name": title,
+        "Problem Links": link,
+        Category,
+        Platform,
+        "Class Written Notes": notes
+      } = assignment;
+
+      if (!title || !Platform) return null;
+
+      const normalizedId = title.toLowerCase().replace(/\s+/g, '_');
+      const normalizedPlatform = Platform.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cardId = `${normalizedId}_${normalizedPlatform}`;
+
+      let difficulty = '';
+      let diffClass = '';
+      if (Category) {
+        const catLower = Category.trim().toLowerCase();
+        if (catLower.includes('easy')) {
+          difficulty = 'Easy';
+          diffClass = 'bg-green-600 text-green-100';
+        } else if (catLower.includes('medium')) {
+          difficulty = 'Medium';
+          diffClass = 'bg-yellow-600 text-yellow-100';
+        } else if (catLower.includes('hard')) {
+          difficulty = 'Hard';
+          diffClass = 'bg-red-700 text-red-100';
+        }
+      }
+
+      const article = document.createElement('article');
+      article.className = `bg-gray-800 rounded-xl p-6 shadow-lg hover:shadow-yellow-400 transition-shadow duration-300 flex flex-col justify-between`;
+      article.dataset.platform = Platform;
+      article.dataset.cardId = cardId;
+
+      const header = document.createElement('header');
+      header.className = 'mb-4';
+
+      const h2 = document.createElement('h2');
+      h2.tabIndex = 0;
+      h2.className = 'text-2xl font-semibold text-yellow-400 cursor-pointer';
+
+      const linkElement = document.createElement('a');
+      linkElement.textContent = title;
+      linkElement.className = 'hover:text-white no-underline';
+      linkElement.title = 'Click to open the question in a new tab';
+      linkElement.target = '_blank';
+      linkElement.rel = 'noopener noreferrer';
+
+      if (link && link.trim().startsWith('http')) {
+        linkElement.href = link.trim();
+      } else {
+        linkElement.href = '#';
+        linkElement.textContent += ' (Link Unavailable)';
+        linkElement.className = 'text-gray-400 cursor-not-allowed no-underline';
+        linkElement.removeAttribute('target');
+        linkElement.removeAttribute('rel');
+      }
+
+      h2.appendChild(linkElement);
+      header.appendChild(h2);
+
+      // Add small hint
+      if (link && link.trim().startsWith('http')) {
+        const smallHint = document.createElement('small');
+        smallHint.className = 'text-xs text-gray-400';
+        smallHint.textContent = 'Opens in a new tab';
+        header.appendChild(smallHint);
+      }
+
+      const detailsDiv = document.createElement('div');
+      detailsDiv.className = 'mt-2 text-sm text-gray-400 space-y-1';
+      if (className) detailsDiv.innerHTML += `<div><strong>Class:</strong> ${className}</div>`;
+      if (Date) detailsDiv.innerHTML += `<div><strong>Date:</strong> ${Date}</div>`;
+      if (content) detailsDiv.innerHTML += `<div><strong>Topic:</strong> ${content}</div>`;
+      if (difficulty) detailsDiv.innerHTML += `<div><strong>Difficulty:</strong> <span class="inline-block px-2 py-0.5 rounded-full font-semibold ${diffClass}">${difficulty}</span></div>`;
+      if (notes) detailsDiv.innerHTML += `<div><strong>Notes:</strong> ${notes}</div>`;
+      if (Category) detailsDiv.innerHTML += `<div><strong>Category:</strong> ${Category}</div>`;
+      if (Platform) detailsDiv.innerHTML += `<div><strong>Platform:</strong> ${Platform}</div>`;
+
+      header.appendChild(detailsDiv);
+
+      const footer = document.createElement('footer');
+      footer.className = 'flex flex-row flex-wrap gap-4 text-gray-300 text-sm whitespace-nowrap px-1 overflow-hidden';
+      footer.innerHTML = `
+        <label class="flex items-center gap-1 cursor-pointer hover:text-green-400">
+          <input type="checkbox" name="solved" class="w-4 h-4 accent-green-400" />
+          ✅ Solved
+        </label>
+        <label class="flex items-center gap-1 cursor-pointer hover:text-yellow-400">
+          <input type="checkbox" name="doubt" class="w-4 h-4 accent-yellow-400" />
+          ❓ Doubt
+        </label>
+        <label class="flex items-center gap-1 cursor-pointer hover:text-red-400">
+          <input type="checkbox" name="reattempt" class="w-4 h-4 accent-red-400" />
+          🔁 Reattempt
+        </label>
+      `;
+
+      article.appendChild(header);
+      article.appendChild(footer);
+
+      // Restore saved state from localStorage
+      const states = JSON.parse(localStorage.getItem(`card-${cardId}`)) || {};
+      article.querySelector('input[name="solved"]').checked = states.solved || false;
+      article.querySelector('input[name="doubt"]').checked = states.doubt || false;
+      article.querySelector('input[name="reattempt"]').checked = states.reattempt || false;
+
+      // Save state on checkbox changes and update counts
+      article.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        input.addEventListener('change', () => {
+          const newState = {
+            solved: article.querySelector('input[name="solved"]').checked,
+            doubt: article.querySelector('input[name="doubt"]').checked,
+            reattempt: article.querySelector('input[name="reattempt"]').checked,
+          };
+          localStorage.setItem(`card-${cardId}`, JSON.stringify(newState));
+          updateCounts(document.getElementById('platformFilter').value);
+        });
+      });
+
+      return article;
+    }
+
+    function updateCounts(selectedPlatform) {
+      const cards = document.querySelectorAll('#assignmentsList > article');
+      const visibleCards = Array.from(cards).filter(card =>
+        selectedPlatform === 'All' || card.dataset.platform === selectedPlatform
+      );
+
+      const totalCount = cards.length;
+      const platformCount = visibleCards.length;
+
+      const solvedCount = visibleCards.filter(card => card.querySelector('input[name="solved"]').checked).length;
+      const doubtCount = visibleCards.filter(card => card.querySelector('input[name="doubt"]').checked).length;
+      const reattemptCount = visibleCards.filter(card => card.querySelector('input[name="reattempt"]').checked).length;
+
+      const countsDisplay = document.getElementById('countsDisplay');
+      countsDisplay.innerHTML = `
+        <div class="flex justify-center gap-8 flex-wrap text-lg text-gray-300">
+          <div>Total Questions: <span class="font-semibold text-yellow-400">${totalCount}</span></div>
+          <div>In <span class="font-semibold text-yellow-400">${selectedPlatform}</span>: <span class="font-semibold text-yellow-400">${platformCount}</span></div>
+          <div>Solved: <span class="font-semibold text-green-400">${solvedCount}</span></div>
+          <div>Doubt: <span class="font-semibold text-yellow-400">${doubtCount}</span></div>
+          <div>Reattempt: <span class="font-semibold text-red-400">${reattemptCount}</span></div>
+        </div>
+      `;
+    }
+
+    function filterByPlatform(platform) {
+      const cards = document.querySelectorAll('#assignmentsList > article');
+      cards.forEach(card => {
+        if (platform === 'All' || card.dataset.platform === platform) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    async function init() {
+      const data = await loadAssignmentsFromCSV(csvUrl);
+
+      const uniquePlatforms = [...new Set(data.map(d => d.Platform).filter(p => p))].sort();
+
+      populatePlatformFilter(uniquePlatforms);
+
+      const list = document.getElementById('assignmentsList');
+      list.innerHTML = '';
+
+      data.forEach(assignment => {
+        const card = createAssignmentCard(assignment);
+        if (card) list.appendChild(card);
+      });
+
+      updateCounts('All');
+    }
+
+    init();
+  </script>
+</body>
+</html>
