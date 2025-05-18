@@ -160,7 +160,7 @@
 
       if (link && link.trim().startsWith('http')) {
         linkElement.href = link.trim();
-        linkElement.target = '_self'; // open in the same tab
+        linkElement.target = '_blank'; // open in the same tab
       } else {
         linkElement.href = '#';
         linkElement.textContent += ' (Link Unavailable)';
