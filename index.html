@@ -10,16 +10,13 @@
 <body class="min-h-screen px-6 py-8">
   <h1 class="text-4xl font-bold text-yellow-400 mb-6 text-center">📘 Assignment Tracker</h1>
 
-  <!-- Platform Filter -->
   <div class="mb-8 text-center">
     <label for="platformFilter" class="text-lg font-semibold text-white mr-2">Filter by Platform:</label>
     <select id="platformFilter" class="p-2 bg-gray-700 text-white rounded-lg"></select>
   </div>
 
-  <!-- Counts Display -->
   <div id="countsDisplay" class="mb-8 text-center"></div>
 
-  <!-- Assignment List -->
   <section id="assignmentsList" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></section>
 
   <script>
@@ -80,11 +77,33 @@
         opt.textContent = pl;
         select.appendChild(opt);
       });
-      select.value = 'All';
       select.addEventListener('change', () => {
-        filterByPlatform(select.value);
-        updateCounts(select.value);
+        const newPlatform = select.value;
+        const url = new URL(window.location);
+        url.searchParams.set('platform', newPlatform);
+        history.pushState({}, '', url);
+        updateViewForPlatform(newPlatform);
       });
+    }
+
+    function updateViewForPlatform(platform) {
+      filterByPlatform(platform);
+      updateCounts(platform);
+      scrollToFirstUnsolved(platform);
+    }
+
+    function scrollToFirstUnsolved(platform) {
+      const cards = document.querySelectorAll('#assignmentsList > article');
+      const visibleCards = Array.from(cards).filter(card =>
+        platform === 'All' || card.dataset.platform === platform
+      );
+
+      const firstUnsolved = visibleCards.find(card => !card.querySelector('input[name="solved"]').checked);
+      if (firstUnsolved) {
+        firstUnsolved.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstUnsolved.classList.add('ring', 'ring-yellow-400');
+        setTimeout(() => firstUnsolved.classList.remove('ring', 'ring-yellow-400'), 2000);
+      }
     }
 
     function createAssignmentCard(assignment) {
@@ -136,30 +155,20 @@
       const linkElement = document.createElement('a');
       linkElement.textContent = title;
       linkElement.className = 'hover:text-white no-underline';
-      linkElement.title = 'Click to open the question in a new tab';
-      linkElement.target = '_blank';
+      linkElement.title = 'Click to open the question';
       linkElement.rel = 'noopener noreferrer';
 
       if (link && link.trim().startsWith('http')) {
         linkElement.href = link.trim();
+        linkElement.target = '_self'; // open in the same tab
       } else {
         linkElement.href = '#';
         linkElement.textContent += ' (Link Unavailable)';
         linkElement.className = 'text-gray-400 cursor-not-allowed no-underline';
-        linkElement.removeAttribute('target');
-        linkElement.removeAttribute('rel');
       }
 
       h2.appendChild(linkElement);
       header.appendChild(h2);
-
-      // Add small hint
-      if (link && link.trim().startsWith('http')) {
-        const smallHint = document.createElement('small');
-        smallHint.className = 'text-xs text-gray-400';
-        smallHint.textContent = 'Opens in a new tab';
-        header.appendChild(smallHint);
-      }
 
       const detailsDiv = document.createElement('div');
       detailsDiv.className = 'mt-2 text-sm text-gray-400 space-y-1';
@@ -177,29 +186,24 @@
       footer.className = 'flex flex-row flex-wrap gap-4 text-gray-300 text-sm whitespace-nowrap px-1 overflow-hidden';
       footer.innerHTML = `
         <label class="flex items-center gap-1 cursor-pointer hover:text-green-400">
-          <input type="checkbox" name="solved" class="w-4 h-4 accent-green-400" />
-          ✅ Solved
+          <input type="checkbox" name="solved" class="w-4 h-4 accent-green-400" /> ✅ Solved
         </label>
         <label class="flex items-center gap-1 cursor-pointer hover:text-yellow-400">
-          <input type="checkbox" name="doubt" class="w-4 h-4 accent-yellow-400" />
-          ❓ Doubt
+          <input type="checkbox" name="doubt" class="w-4 h-4 accent-yellow-400" /> ❓ Doubt
         </label>
         <label class="flex items-center gap-1 cursor-pointer hover:text-red-400">
-          <input type="checkbox" name="reattempt" class="w-4 h-4 accent-red-400" />
-          🔁 Reattempt
+          <input type="checkbox" name="reattempt" class="w-4 h-4 accent-red-400" /> 🔁 Reattempt
         </label>
       `;
 
       article.appendChild(header);
       article.appendChild(footer);
 
-      // Restore saved state from localStorage
       const states = JSON.parse(localStorage.getItem(`card-${cardId}`)) || {};
       article.querySelector('input[name="solved"]').checked = states.solved || false;
       article.querySelector('input[name="doubt"]').checked = states.doubt || false;
       article.querySelector('input[name="reattempt"]').checked = states.reattempt || false;
 
-      // Save state on checkbox changes and update counts
       article.querySelectorAll('input[type="checkbox"]').forEach(input => {
         input.addEventListener('change', () => {
           const newState = {
@@ -243,30 +247,25 @@
     function filterByPlatform(platform) {
       const cards = document.querySelectorAll('#assignmentsList > article');
       cards.forEach(card => {
-        if (platform === 'All' || card.dataset.platform === platform) {
-          card.style.display = '';
-        } else {
-          card.style.display = 'none';
-        }
+        card.style.display = (platform === 'All' || card.dataset.platform === platform) ? '' : 'none';
       });
     }
 
     async function init() {
       const data = await loadAssignmentsFromCSV(csvUrl);
+      const platforms = [...new Set(data.map(d => d.Platform).filter(Boolean))].sort();
+      populatePlatformFilter(platforms);
 
-      const uniquePlatforms = [...new Set(data.map(d => d.Platform).filter(p => p))].sort();
-
-      populatePlatformFilter(uniquePlatforms);
-
-      const list = document.getElementById('assignmentsList');
-      list.innerHTML = '';
-
-      data.forEach(assignment => {
-        const card = createAssignmentCard(assignment);
-        if (card) list.appendChild(card);
+      const container = document.getElementById('assignmentsList');
+      container.innerHTML = '';
+      data.forEach(row => {
+        const card = createAssignmentCard(row);
+        if (card) container.appendChild(card);
       });
 
-      updateCounts('All');
+      const currentPlatform = new URLSearchParams(window.location.search).get('platform') || 'All';
+      document.getElementById('platformFilter').value = currentPlatform;
+      updateViewForPlatform(currentPlatform);
     }
 
     init();
