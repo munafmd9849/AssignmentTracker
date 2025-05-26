@@ -20,8 +20,8 @@
   <section id="assignmentsList" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></section>
 
   <script>
-    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTVfwEi72-GrAUadv07AmV1fDPDj4FtEQ1vL0K58Zpz7F7_RmQuljU9x3agT2fG0Au1LFi3NaGCy0RR/pub?gid=61493459&single=true&output=csv';
-
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTIVsvqCu6tgnal6G7D6WXZksMxLC7wHMUbkEi-9VBwpHw2umKj6obOqjlnvkanm4oLRnIjxqNUJHbn/pub?gid=252917496&single=true&output=csv';
+    
     const PLATFORM_NORMALIZATION_MAP = {
       'leetcode': 'LeetCode',
       'leet code': 'LeetCode',
@@ -186,13 +186,13 @@
       footer.className = 'flex flex-row flex-wrap gap-4 text-gray-300 text-sm whitespace-nowrap px-1 overflow-hidden';
       footer.innerHTML = `
         <label class="flex items-center gap-1 cursor-pointer hover:text-green-400">
-          <input type="checkbox" name="solved" class="w-4 h-4 accent-green-400" /> ✅ Solved
+          <input type="checkbox" name="solved" class="w-4 h-4 accent-green-400" />  Solved
         </label>
         <label class="flex items-center gap-1 cursor-pointer hover:text-yellow-400">
-          <input type="checkbox" name="doubt" class="w-4 h-4 accent-yellow-400" /> ❓ Doubt
+          <input type="checkbox" name="doubt" class="w-4 h-4 accent-yellow-400" />  Doubt
         </label>
         <label class="flex items-center gap-1 cursor-pointer hover:text-red-400">
-          <input type="checkbox" name="reattempt" class="w-4 h-4 accent-red-400" /> 🔁 Reattempt
+          <input type="checkbox" name="reattempt" class="w-4 h-4 accent-red-400" />  Reattempt🔁
         </label>
       `;
 
