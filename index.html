@@ -12,7 +12,16 @@
 
   <div class="mb-8 text-center">
     <label for="platformFilter" class="text-lg font-semibold text-white mr-2">Filter by Platform:</label>
-    <select id="platformFilter" class="p-2 bg-gray-700 text-white rounded-lg"></select>
+    <select id="platformFilter" class="p-2 bg-gray-700 text-white rounded-lg mr-4"></select>
+
+    <label for="statusFilter" class="text-lg font-semibold text-white mr-2">Filter by Status:</label>
+    <select id="statusFilter" class="p-2 bg-gray-700 text-white rounded-lg">
+      <option value="All">All</option>
+      <option value="Solved">Solved</option>
+      <option value="Unsolved">Unsolved</option>
+      <option value="Doubt">Doubt</option>
+      <option value="Reattempt">Reattempt</option>
+    </select>
   </div>
 
   <div id="countsDisplay" class="mb-8 text-center"></div>
@@ -20,8 +29,10 @@
   <section id="assignmentsList" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></section>
 
   <script>
+    // Defining the CSV URL for fetching assignment data
     const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTIVsvqCu6tgnal6G7D6WXZksMxLC7wHMUbkEi-9VBwpHw2umKj6obOqjlnvkanm4oLRnIjxqNUJHbn/pub?gid=252917496&single=true&output=csv';
-    
+
+    // Normalizing platform names for consistency
     const PLATFORM_NORMALIZATION_MAP = {
       'leetcode': 'LeetCode',
       'leet code': 'LeetCode',
@@ -39,6 +50,31 @@
       return PLATFORM_NORMALIZATION_MAP[key] || raw;
     }
 
+    // Extracting difficulty from Category column
+    function extractDifficulty(category) {
+      if (!category) return '';
+      const catLower = category.trim().toLowerCase();
+      if (catLower.includes('easy')) return 'Easy';
+      if (catLower.includes('medium')) return 'Medium';
+      if (catLower.includes('hard')) return 'Hard';
+      return '';
+    }
+
+    // Getting Tailwind classes for difficulty styling
+    function getDifficultyClass(difficulty) {
+      switch (difficulty) {
+        case 'Easy':
+          return 'bg-green-600 text-green-100';
+        case 'Medium':
+          return 'bg-yellow-600 text-yellow-100';
+        case 'Hard':
+          return 'bg-red-700 text-red-100';
+        default:
+          return 'bg-gray-600 text-gray-100';
+      }
+    }
+
+    // Loading assignments from CSV
     async function loadAssignmentsFromCSV(url) {
       try {
         const response = await fetch(url);
@@ -52,6 +88,7 @@
               const data = results.data.map(row => ({
                 ...row,
                 Platform: normalizePlatformName(row.Platform),
+                Difficulty: extractDifficulty(row.Category),
               }));
               resolve(data);
             },
@@ -64,6 +101,7 @@
       }
     }
 
+    // Populating platform filter dropdown
     function populatePlatformFilter(platforms) {
       const select = document.getElementById('platformFilter');
       select.innerHTML = '';
@@ -77,35 +115,64 @@
         opt.textContent = pl;
         select.appendChild(opt);
       });
-      select.addEventListener('change', () => {
-        const newPlatform = select.value;
-        const url = new URL(window.location);
-        url.searchParams.set('platform', newPlatform);
-        history.pushState({}, '', url);
-        updateViewForPlatform(newPlatform);
+      select.addEventListener('change', updateView);
+    }
+
+    // Adding event listener for status filter
+    document.getElementById('statusFilter').addEventListener('change', updateView);
+
+    // Updating the view based on filters
+    function updateView() {
+      const platform = document.getElementById('platformFilter').value;
+      const status = document.getElementById('statusFilter').value;
+      filterCards(platform, status);
+      updateCounts(platform, status);
+    }
+
+    // Filtering cards based on platform and status
+    function filterCards(platform, status) {
+      const cards = document.querySelectorAll('#assignmentsList > article');
+      cards.forEach(card => {
+        const cardPlatform = card.dataset.platform;
+        const solved = card.querySelector('input[name="solved"]').checked;
+        const doubt = card.querySelector('input[name="doubt"]').checked;
+        const reattempt = card.querySelector('input[name="reattempt"]').checked;
+
+        const matchesPlatform = platform === 'All' || cardPlatform === platform;
+        let matchesStatus = true;
+        if (status === 'Solved') matchesStatus = solved;
+        else if (status === 'Unsolved') matchesStatus = !solved;
+        else if (status === 'Doubt') matchesStatus = doubt;
+        else if (status === 'Reattempt') matchesStatus = reattempt;
+
+        card.style.display = (matchesPlatform && matchesStatus) ? '' : 'none';
       });
     }
 
-    function updateViewForPlatform(platform) {
-      filterByPlatform(platform);
-      updateCounts(platform);
-      scrollToFirstUnsolved(platform);
-    }
-
-    function scrollToFirstUnsolved(platform) {
+    // Updating counts display
+    function updateCounts(platform, status) {
       const cards = document.querySelectorAll('#assignmentsList > article');
-      const visibleCards = Array.from(cards).filter(card =>
-        platform === 'All' || card.dataset.platform === platform
-      );
+      const visibleCards = Array.from(cards).filter(card => card.style.display !== 'none');
 
-      const firstUnsolved = visibleCards.find(card => !card.querySelector('input[name="solved"]').checked);
-      if (firstUnsolved) {
-        firstUnsolved.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        firstUnsolved.classList.add('ring', 'ring-yellow-400');
-        setTimeout(() => firstUnsolved.classList.remove('ring', 'ring-yellow-400'), 2000);
-      }
+      const totalCount = cards.length;
+      const visibleCount = visibleCards.length;
+      const solvedCount = visibleCards.filter(card => card.querySelector('input[name="solved"]').checked).length;
+      const doubtCount = visibleCards.filter(card => card.querySelector('input[name="doubt"]').checked).length;
+      const reattemptCount = visibleCards.filter(card => card.querySelector('input[name="reattempt"]').checked).length;
+
+      const countsDisplay = document.getElementById('countsDisplay');
+      countsDisplay.innerHTML = `
+        <div class="flex justify-center gap-8 flex-wrap text-lg text-gray-300">
+          <div>Total Questions: <span class="font-semibold text-yellow-400">${totalCount}</span></div>
+          <div>Visible: <span class="font-semibold text-yellow-400">${visibleCount}</span></div>
+          <div>Solved: <span class="font-semibold text-green-400">${solvedCount}</span></div>
+          <div>Doubt: <span class="font-semibold text-yellow-400">${doubtCount}</span></div>
+          <div>Reattempt: <span class="font-semibold text-red-400">${reattemptCount}</span></div>
+        </div>
+      `;
     }
 
+    // Creating assignment card
     function createAssignmentCard(assignment) {
       const {
         Date,
@@ -115,36 +182,24 @@
         "Problem Links": link,
         Category,
         Platform,
-        "Class Written Notes": notes
+        "Class Written Notes": notes,
+        Difficulty
       } = assignment;
 
       if (!title || !Platform) return null;
 
+      // Generating unique card ID
       const normalizedId = title.toLowerCase().replace(/\s+/g, '_');
       const normalizedPlatform = Platform.toLowerCase().replace(/[^a-z0-9]/g, '');
       const cardId = `${normalizedId}_${normalizedPlatform}`;
 
-      let difficulty = '';
-      let diffClass = '';
-      if (Category) {
-        const catLower = Category.trim().toLowerCase();
-        if (catLower.includes('easy')) {
-          difficulty = 'Easy';
-          diffClass = 'bg-green-600 text-green-100';
-        } else if (catLower.includes('medium')) {
-          difficulty = 'Medium';
-          diffClass = 'bg-yellow-600 text-yellow-100';
-        } else if (catLower.includes('hard')) {
-          difficulty = 'Hard';
-          diffClass = 'bg-red-700 text-red-100';
-        }
-      }
-
+      // Creating card element
       const article = document.createElement('article');
       article.className = `bg-gray-800 rounded-xl p-6 shadow-lg hover:shadow-yellow-400 transition-shadow duration-300 flex flex-col justify-between`;
       article.dataset.platform = Platform;
       article.dataset.cardId = cardId;
 
+      // Creating header
       const header = document.createElement('header');
       header.className = 'mb-4';
 
@@ -160,7 +215,7 @@
 
       if (link && link.trim().startsWith('http')) {
         linkElement.href = link.trim();
-        linkElement.target = '_blank'; // open in the same tab
+        linkElement.target = '_blank';
       } else {
         linkElement.href = '#';
         linkElement.textContent += ' (Link Unavailable)';
@@ -170,18 +225,20 @@
       h2.appendChild(linkElement);
       header.appendChild(h2);
 
+      // Creating details section
       const detailsDiv = document.createElement('div');
       detailsDiv.className = 'mt-2 text-sm text-gray-400 space-y-1';
       if (className) detailsDiv.innerHTML += `<div><strong>Class:</strong> ${className}</div>`;
       if (Date) detailsDiv.innerHTML += `<div><strong>Date:</strong> ${Date}</div>`;
       if (content) detailsDiv.innerHTML += `<div><strong>Topic:</strong> ${content}</div>`;
-      if (difficulty) detailsDiv.innerHTML += `<div><strong>Difficulty:</strong> <span class="inline-block px-2 py-0.5 rounded-full font-semibold ${diffClass}">${difficulty}</span></div>`;
+      if (Difficulty) detailsDiv.innerHTML += `<div><strong>Difficulty:</strong> <span class="inline-block px-2 py-0.5 rounded-full font-semibold ${getDifficultyClass(Difficulty)}">${Difficulty}</span></div>`;
       if (notes) detailsDiv.innerHTML += `<div><strong>Notes:</strong> ${notes}</div>`;
       if (Category) detailsDiv.innerHTML += `<div><strong>Category:</strong> ${Category}</div>`;
       if (Platform) detailsDiv.innerHTML += `<div><strong>Platform:</strong> ${Platform}</div>`;
 
       header.appendChild(detailsDiv);
 
+      // Creating footer with checkboxes
       const footer = document.createElement('footer');
       footer.className = 'flex flex-row flex-wrap gap-4 text-gray-300 text-sm whitespace-nowrap px-1 overflow-hidden';
       footer.innerHTML = `
@@ -199,58 +256,29 @@
       article.appendChild(header);
       article.appendChild(footer);
 
+      // Loading checkbox states from localStorage
       const states = JSON.parse(localStorage.getItem(`card-${cardId}`)) || {};
       article.querySelector('input[name="solved"]').checked = states.solved || false;
       article.querySelector('input[name="doubt"]').checked = states.doubt || false;
       article.querySelector('input[name="reattempt"]').checked = states.reattempt || false;
 
+      // Adding event listeners to save checkbox states
       article.querySelectorAll('input[type="checkbox"]').forEach(input => {
         input.addEventListener('change', () => {
-          const newState = {
+          const newStates = {
             solved: article.querySelector('input[name="solved"]').checked,
             doubt: article.querySelector('input[name="doubt"]').checked,
             reattempt: article.querySelector('input[name="reattempt"]').checked,
           };
-          localStorage.setItem(`card-${cardId}`, JSON.stringify(newState));
-          updateCounts(document.getElementById('platformFilter').value);
+          localStorage.setItem(`card-${cardId}`, JSON.stringify(newStates));
+          updateView();
         });
       });
 
       return article;
     }
 
-    function updateCounts(selectedPlatform) {
-      const cards = document.querySelectorAll('#assignmentsList > article');
-      const visibleCards = Array.from(cards).filter(card =>
-        selectedPlatform === 'All' || card.dataset.platform === selectedPlatform
-      );
-
-      const totalCount = cards.length;
-      const platformCount = visibleCards.length;
-
-      const solvedCount = visibleCards.filter(card => card.querySelector('input[name="solved"]').checked).length;
-      const doubtCount = visibleCards.filter(card => card.querySelector('input[name="doubt"]').checked).length;
-      const reattemptCount = visibleCards.filter(card => card.querySelector('input[name="reattempt"]').checked).length;
-
-      const countsDisplay = document.getElementById('countsDisplay');
-      countsDisplay.innerHTML = `
-        <div class="flex justify-center gap-8 flex-wrap text-lg text-gray-300">
-          <div>Total Questions: <span class="font-semibold text-yellow-400">${totalCount}</span></div>
-          <div>In <span class="font-semibold text-yellow-400">${selectedPlatform}</span>: <span class="font-semibold text-yellow-400">${platformCount}</span></div>
-          <div>Solved: <span class="font-semibold text-green-400">${solvedCount}</span></div>
-          <div>Doubt: <span class="font-semibold text-yellow-400">${doubtCount}</span></div>
-          <div>Reattempt: <span class="font-semibold text-red-400">${reattemptCount}</span></div>
-        </div>
-      `;
-    }
-
-    function filterByPlatform(platform) {
-      const cards = document.querySelectorAll('#assignmentsList > article');
-      cards.forEach(card => {
-        card.style.display = (platform === 'All' || card.dataset.platform === platform) ? '' : 'none';
-      });
-    }
-
+    // Initializing the application
     async function init() {
       const data = await loadAssignmentsFromCSV(csvUrl);
       const platforms = [...new Set(data.map(d => d.Platform).filter(Boolean))].sort();
@@ -263,9 +291,7 @@
         if (card) container.appendChild(card);
       });
 
-      const currentPlatform = new URLSearchParams(window.location.search).get('platform') || 'All';
-      document.getElementById('platformFilter').value = currentPlatform;
-      updateViewForPlatform(currentPlatform);
+      updateView();
     }
 
     init();
